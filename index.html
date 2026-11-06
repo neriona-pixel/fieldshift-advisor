@@ -1,0 +1,52 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="FieldShift Advisor - Aide à la décision pour la rotation des cultures avec les données NASA.">
+  <title>FieldShift Advisor</title>
+</head>
+<body>
+  <header>
+    <h1>🌱 FieldShift Advisor</h1>
+    <p>Des décisions agricoles éclairées par les données NASA.</p>
+  </header>
+
+  <main>
+    <h2>Bienvenue à Fallon, Nevada</h2>
+    <p>Chargement du prototype en cours...</p>
+    <p id="status">Initialisation...</p>
+  </main>
+
+  <footer>
+    Outil d'aide à la décision. Il ne remplace pas l'expertise locale.
+  </footer>
+
+  <script>
+    async function testBackup() {
+      const status = document.getElementById("status");
+
+      try {
+        const response = await fetch("./data/nevada.json");
+
+        if (!response.ok) {
+          throw new Error("Fichier JSON introuvable");
+        }
+
+        const data = await response.json();
+
+        status.textContent =
+          "Données de secours chargées avec succès.";
+
+        console.log("NASA POWER backup:", data);
+      } catch (error) {
+        status.textContent = "Erreur : " + error.message;
+        console.error(error);
+      }
+    }
+
+    testBackup();
+  </script>
+</body>
+</html>
