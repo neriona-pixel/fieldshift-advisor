@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="FieldShift Advisor - Aide à la décision agricole avec les données NASA POWER.">
+<meta name="description" content="FieldShift Advisor - crop rotation decision support built on NASA POWER climate data.">
 <title>FieldShift Advisor | NASA Space Apps 2026</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 :root{--bg:#fafaf7;--panel:#fff;--green:#245b36;--green2:#2e7d32;--green-light:#e8f2e8;--orange:#ef6c00;--orange-light:#fff0df;--red:#b9382d;--text:#26352b;--muted:#4a4a4a;--line:#d9dfd6;--shadow:0 4px 16px rgba(30,55,35,.07)}
 *{box-sizing:border-box}
@@ -37,13 +37,17 @@ input[type=range]{width:100%;accent-color:var(--green2);cursor:pointer}
 .range-value{color:var(--green);font-weight:700}
 button{width:100%;border:none;background:var(--green);color:#fff;padding:12px 16px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px}
 button:hover{background:#194629}
+.preset-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.preset-row button.preset{width:auto;margin:0;padding:6px 10px;font-size:12px;background:var(--green-light);color:var(--green);border:1px solid var(--line)}
+.preset-row button.preset:hover{background:#d6e8d6}
 .status{padding:10px 12px;border-radius:8px;background:var(--green-light);color:#194629;font-size:13px;margin-top:12px}
 .status.error{background:#fde9e7;color:#8b211b}
 .status.warning{background:var(--orange-light);color:#783800}
-.kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .kpi{background:#fff;border:1px solid var(--line);border-radius:11px;padding:15px;min-width:0}
 .kpi-label{font-size:12px;color:var(--muted);min-height:35px}
 .kpi-value{font-size:clamp(20px,2.4vw,28px);font-weight:800;color:var(--green);margin-top:5px}
+.kpi-value.small{font-size:clamp(15px,1.7vw,19px);padding:5px 0}
 .kpi-unit{font-size:11px;color:var(--muted)}
 .chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
 .chart-box{height:255px;position:relative;min-width:0}
@@ -56,6 +60,7 @@ button:hover{background:#194629}
 .strategy small{color:var(--muted);font-size:12px;font-weight:400}
 .strategy ul{padding-left:18px;margin:10px 0;font-size:13px}
 .strategy li{margin:5px 0}
+.strategy .why{font-size:12px;color:var(--muted);margin:6px 0 4px}
 .rotation{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0}
 .crop-pill{background:var(--green-light);color:#194629;border-radius:20px;padding:5px 9px;font-size:11px;font-weight:700}
 .confidence{display:inline-block;padding:4px 8px;border-radius:5px;font-size:11px;font-weight:700;background:#edf1ed;color:#334638}
@@ -84,7 +89,7 @@ button:hover{background:#194629}
 .glossary summary{cursor:pointer;font-weight:700;color:var(--green)}
 .disclaimer{margin-top:22px;padding:15px;border-left:4px solid var(--orange);background:#fff7ed;color:#54351d;font-size:12px;border-radius:5px}
 footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
-@media(max-width:950px){.layout{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)}.dash-grid{grid-template-columns:1fr}}
+@media(max-width:950px){.layout{grid-template-columns:1fr}.dash-grid{grid-template-columns:1fr}}
 @media(max-width:600px){main{padding:0 12px}.chart-grid,.strategy-grid,.scenario-controls{grid-template-columns:1fr}.timeline{grid-template-columns:repeat(6,1fr)}.chart-box{height:230px}}
 </style>
 </head>
@@ -99,7 +104,7 @@ footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
 <main>
   <section class="intro">
     <h2>From climate data to smarter crop rotations</h2>
-    <p>Explore climate conditions in Fallon, Nevada, and compare possible crop rotation strategies.</p>
+    <p>Explore climate conditions at <strong id="placeName">Fallon, Nevada</strong>, and compare crop rotations generated for that place and your current crop.</p>
   </section>
 
   <div class="layout">
@@ -108,19 +113,20 @@ footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
       <section class="panel">
         <h2>1. Select a field</h2>
         <div id="map"></div>
-        <p class="map-note">Demo location: Fallon, Nevada (39.47° N, 118.78° W). Clicking the map changes the displayed coordinates only. The demo NASA dataset remains associated with Fallon.</p>
+        <p class="map-note">Click anywhere on the map, or pick a preset, to download 10 years of NASA POWER data for that point. Resolution is about 0.5° (~50 km): regional, not field-level.</p>
+        <div class="preset-row">
+          <button class="preset" data-lat="39.47" data-lon="-118.78" data-name="Fallon, Nevada (USA)">Fallon, NV</button>
+          <button class="preset" data-lat="36.74" data-lon="-119.79" data-name="Central Valley, California (USA)">Central Valley, CA</button>
+          <button class="preset" data-lat="40.81" data-lon="-96.70" data-name="Lincoln, Nebraska (USA)">Nebraska</button>
+          <button class="preset" data-lat="37.89" data-lon="-4.78" data-name="Córdoba (Spain)">Córdoba, Spain</button>
+        </div>
         <div id="locationLabel" class="status">Selected location: Fallon, Nevada</div>
       </section>
 
       <section class="panel">
         <h2>2. Farm context</h2>
         <label for="currentCrop">Current crop</label>
-        <select id="currentCrop">
-          <option value="alfalfa">Alfalfa</option>
-          <option value="barley">Barley</option>
-          <option value="wheat">Winter wheat</option>
-          <option value="sorghum">Sorghum</option>
-        </select>
+        <select id="currentCrop"></select>
         <label for="soilType">Soil type</label>
         <select id="soilType">
           <option value="loam">Loam</option>
@@ -133,12 +139,12 @@ footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
           <option value="moderate" selected>Moderate</option>
           <option value="abundant">Abundant</option>
         </select>
-        <p class="map-note">The rotations below are predefined scenarios. The selected crop describes the current field context; it does not automatically rewrite the rotations.</p>
+        <p class="map-note">Your current crop becomes year 1 of every alternative rotation, and "continuous current crop" is the baseline (existing practice). Alternatives are regenerated whenever the place, crop, soil, irrigation or climate scenario changes.</p>
       </section>
 
       <section class="panel">
         <h2>3. Your priorities</h2>
-        <p class="map-note">Adjust the importance of each objective from 1 to 5.</p>
+        <p class="map-note">Adjust the importance of each objective from 1 to 5. They rank the rotations.</p>
         <div class="priority"><div class="priority-line"><label for="waterWeight">Water saving</label><span id="waterValue" class="range-value">5</span></div><input id="waterWeight" type="range" min="1" max="5" value="5"></div>
         <div class="priority"><div class="priority-line"><label for="incomeWeight">Income</label><span id="incomeValue" class="range-value">3</span></div><input id="incomeWeight" type="range" min="1" max="5" value="3"></div>
         <div class="priority"><div class="priority-line"><label for="nitrogenWeight">Nitrogen fixation</label><span id="nitrogenValue" class="range-value">3</span></div><input id="nitrogenWeight" type="range" min="1" max="5" value="3"></div>
@@ -157,6 +163,8 @@ footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
         <div class="kpi"><div class="kpi-label">Average annual precipitation</div><div id="rainKpi" class="kpi-value">--</div><div class="kpi-unit">mm / year</div></div>
         <div class="kpi"><div class="kpi-label">Hot days</div><div id="heatKpi" class="kpi-value">--</div><div class="kpi-unit">T2M_MAX above 35°C / year</div></div>
         <div class="kpi"><div class="kpi-label">Frost days</div><div id="frostKpi" class="kpi-value">--</div><div class="kpi-unit">T2M_MIN below 0°C / year</div></div>
+        <div class="kpi"><div class="kpi-label">Frost-free season</div><div id="ffKpi" class="kpi-value">--</div><div class="kpi-unit">days between last and first frost</div></div>
+        <div class="kpi"><div class="kpi-label">Typical frost dates</div><div id="frostDatesKpi" class="kpi-value small">--</div><div class="kpi-unit">last spring → first autumn (median)</div></div>
         <div class="kpi"><div class="kpi-label">Root-zone wetness</div><div id="soilKpi" class="kpi-value">--</div><div class="kpi-unit">GWETROOT indicator</div></div>
       </section>
 
@@ -172,8 +180,9 @@ footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
 
       <section class="panel">
         <h2>5. Compare four rotation strategies</h2>
-        <p class="map-note">Relative scores combine the selected farm priorities with indicative crop characteristics and the NASA POWER climate of each year (2016–2025). They are not predicted yields or guaranteed economic returns.</p>
-        <div id="strategyResults" class="strategy-grid"><p>Waiting for climate data...</p></div>
+        <p class="map-note">Relative scores combine your priorities with indicative crop characteristics and the NASA POWER climate of each year (2016–2025). They are not predicted yields or guaranteed economic returns.</p>
+        <div id="buildNote" class="status">Building rotations...</div>
+        <div id="strategyResults" class="strategy-grid" style="margin-top:14px"><p>Waiting for climate data...</p></div>
       </section>
 
       <section class="panel">
@@ -212,7 +221,7 @@ footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
 
       <section class="panel">
         <h2>7. Climate scenario explorer</h2>
-        <p class="map-note">Explore a hypothetical change in temperature and precipitation. The rotation scores and the dashboard update with it. This is a sensitivity exercise, not a climate forecast.</p>
+        <p class="map-note">Explore a hypothetical change in temperature and precipitation. The frost-free season, the generated rotations, the scores and the dashboard all update with it. This is a sensitivity exercise, not a climate forecast.</p>
         <div class="scenario-controls">
           <div><label for="tempScenario">Temperature change: <span id="tempScenarioValue">+0.0°C</span></label><input id="tempScenario" type="range" min="-2" max="5" step="0.5" value="0"></div>
           <div><label for="rainScenario">Precipitation change: <span id="rainScenarioValue">0%</span></label><input id="rainScenario" type="range" min="-50" max="30" step="5" value="0"></div>
@@ -225,6 +234,8 @@ footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
         <details><summary>NASA POWER</summary><p>NASA POWER provides meteorological and solar data useful for agricultural and environmental applications.</p></details>
         <details><summary>PRECTOTCORR</summary><p>Corrected precipitation estimate, expressed in millimeters per day in the daily dataset.</p></details>
         <details><summary>T2M_MAX and T2M_MIN</summary><p>Daily maximum and minimum air temperature at 2 meters, expressed in degrees Celsius.</p></details>
+        <details><summary>Frost-free season</summary><p>Days between the last spring frost and the first autumn frost (T2M_MIN below 0°C). Warm-season crops need a minimum length (for example about 120 days for sorghum), so crops that do not fit are excluded from the generated rotations.</p></details>
+        <details><summary>How rotations are generated</summary><p>Year 1 is your current crop. The tool lists every four-year sequence that can be built from the crops fitting the local frost-free season, avoids repeating a crop family back to back where possible, scores each one for three objectives (low water demand, soil health, and income with forage), keeps the best one per objective, and makes sure the three differ from each other. Your priorities then rank them against the baseline.</p></details>
         <details><summary>GWETROOT</summary><p>Relative root-zone soil wetness indicator. It should not be interpreted as a direct percentage of plant-available water.</p></details>
         <details><summary>EVLAND</summary><p>Evaporation from land surfaces. Its interpretation and units depend on the selected temporal product.</p></details>
         <details><summary>Confidence and uncertainty</summary><p>Confidence labels in this prototype are indicative and based on variation in the available annual climate indicators. They are not statistical validation of crop performance.</p></details>
@@ -235,11 +246,11 @@ footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
 
   <div class="disclaimer">
     <strong>Decision-support prototype — not an agronomic prescription.</strong>
-    NASA POWER climate data are useful for understanding regional conditions, but they do not replace field soil tests, irrigation records, local agronomic expertise or crop-specific economic analysis. Crop ratings and rotation scores are indicative and require local validation. NASA POWER data have a regional spatial resolution and may not represent conditions in an individual field.
+    NASA POWER climate data are useful for understanding regional conditions, but they do not replace field soil tests, irrigation records, local agronomic expertise or crop-specific economic analysis. Crop ratings, frost-free requirements and rotation scores are indicative and require local validation. NASA POWER data have a regional spatial resolution and may not represent conditions in an individual field.
   </div>
 </main>
 
-<footer>FieldShift Advisor · NASA Space Apps Challenge 2026 · Fallon, Nevada demo</footer>
+<footer>FieldShift Advisor · NASA Space Apps Challenge 2026</footer>
 
 <script>
 "use strict";
@@ -254,49 +265,53 @@ const PARAMETER_NAMES = ["T2M","T2M_MAX","T2M_MIN","PRECTOTCORR","GWETROOT","GWE
 
 let climate = null;
 let charts = {};
+let currentPlace = { lat: LATITUDE, lon: LONGITUDE, name: "Fallon, Nevada" };
+let requestId = 0;
+const liveCache = {};
+const candCache = {};
 
-/* 2. CROP CHARACTERISTICS (indicative ratings, 1 to 5) */
+/* 2. CROP LIBRARY (indicative ratings, 1 to 5; to be validated locally)
+   family  : used to avoid repeating the same crop family back to back
+   role    : "main" crops can be the current crop, "cover" crops cannot
+   minFF   : indicative minimum frost-free days a warm-season crop needs (0 = overwinters / perennial)
+   overwinter : crop stays in the field through winter, so winter frost matters
+   niche   : market or equipment may be limited locally */
 const crops = {
-  alfalfa:   { name: "Alfalfa",          water: 5, drought: 4, heat: 4, frost: 4, nitrogen: 5, erosion: 5, organic: 5, pest: 3, income: 4, forage: 5, cover: 5 },
-  barley:    { name: "Barley",           water: 3, drought: 3, heat: 3, frost: 4, nitrogen: 1, erosion: 3, organic: 2, pest: 3, income: 3, forage: 2, cover: 3 },
-  wheat:     { name: "Winter wheat",     water: 3, drought: 3, heat: 3, frost: 4, nitrogen: 1, erosion: 4, organic: 3, pest: 3, income: 4, forage: 2, cover: 4 },
-  sorghum:   { name: "Sorghum",          water: 3, drought: 5, heat: 5, frost: 1, nitrogen: 1, erosion: 3, organic: 2, pest: 3, income: 4, forage: 5, cover: 3 },
-  triticale: { name: "Triticale forage", water: 3, drought: 3, heat: 3, frost: 4, nitrogen: 1, erosion: 4, organic: 3, pest: 3, income: 3, forage: 5, cover: 4 },
-  safflower: { name: "Safflower",        water: 3, drought: 4, heat: 4, frost: 3, nitrogen: 1, erosion: 3, organic: 2, pest: 3, income: 4, forage: 1, cover: 2 },
-  pea:       { name: "Forage pea",       water: 2, drought: 2, heat: 2, frost: 3, nitrogen: 5, erosion: 4, organic: 4, pest: 4, income: 3, forage: 4, cover: 5 },
-  rye:       { name: "Rye cover crop",   water: 3, drought: 3, heat: 2, frost: 5, nitrogen: 1, erosion: 5, organic: 5, pest: 4, income: 1, forage: 2, cover: 5 }
+  alfalfa:   { name: "Alfalfa",                 role: "main",  family: "legume",  minFF: 0,   overwinter: true,  niche: false, water: 5, drought: 4, heat: 4, frost: 4, nitrogen: 5, erosion: 5, organic: 5, pest: 3, income: 4, forage: 5, cover: 5 },
+  barley:    { name: "Barley",                  role: "main",  family: "grass",   minFF: 80,  overwinter: false, niche: false, water: 3, drought: 3, heat: 3, frost: 4, nitrogen: 1, erosion: 3, organic: 2, pest: 3, income: 3, forage: 2, cover: 3 },
+  wheat:     { name: "Winter wheat",            role: "main",  family: "grass",   minFF: 0,   overwinter: true,  niche: false, water: 3, drought: 3, heat: 3, frost: 4, nitrogen: 1, erosion: 4, organic: 3, pest: 3, income: 4, forage: 2, cover: 4 },
+  oats:      { name: "Oats",                    role: "main",  family: "grass",   minFF: 75,  overwinter: false, niche: false, water: 3, drought: 2, heat: 2, frost: 4, nitrogen: 1, erosion: 3, organic: 3, pest: 3, income: 2, forage: 3, cover: 3 },
+  triticale: { name: "Triticale forage",        role: "main",  family: "grass",   minFF: 0,   overwinter: true,  niche: false, water: 3, drought: 3, heat: 3, frost: 4, nitrogen: 1, erosion: 4, organic: 3, pest: 3, income: 3, forage: 5, cover: 4 },
+  corn:      { name: "Silage corn",             role: "main",  family: "grass",   minFF: 130, overwinter: false, niche: false, water: 5, drought: 2, heat: 3, frost: 1, nitrogen: 1, erosion: 2, organic: 3, pest: 3, income: 4, forage: 5, cover: 2 },
+  sorghum:   { name: "Sorghum",                 role: "main",  family: "grass",   minFF: 120, overwinter: false, niche: false, water: 3, drought: 5, heat: 5, frost: 1, nitrogen: 1, erosion: 3, organic: 2, pest: 3, income: 4, forage: 5, cover: 3 },
+  soybean:   { name: "Soybean",                 role: "main",  family: "legume",  minFF: 115, overwinter: false, niche: false, water: 4, drought: 2, heat: 3, frost: 1, nitrogen: 4, erosion: 2, organic: 3, pest: 4, income: 4, forage: 2, cover: 2 },
+  pea:       { name: "Forage pea",              role: "main",  family: "legume",  minFF: 80,  overwinter: false, niche: true,  water: 2, drought: 2, heat: 2, frost: 3, nitrogen: 5, erosion: 4, organic: 4, pest: 4, income: 3, forage: 4, cover: 5 },
+  safflower: { name: "Safflower",               role: "main",  family: "oilseed", minFF: 110, overwinter: false, niche: true,  water: 3, drought: 4, heat: 4, frost: 3, nitrogen: 1, erosion: 3, organic: 2, pest: 3, income: 4, forage: 1, cover: 2 },
+  sunflower: { name: "Sunflower",               role: "main",  family: "oilseed", minFF: 105, overwinter: false, niche: true,  water: 3, drought: 4, heat: 4, frost: 2, nitrogen: 1, erosion: 3, organic: 3, pest: 3, income: 4, forage: 1, cover: 2 },
+  rye:       { name: "Rye cover crop",          role: "cover", family: "grass",   minFF: 0,   overwinter: true,  niche: false, water: 3, drought: 3, heat: 2, frost: 5, nitrogen: 1, erosion: 5, organic: 5, pest: 4, income: 1, forage: 2, cover: 5 },
+  vetch:     { name: "Hairy vetch cover crop",  role: "cover", family: "legume",  minFF: 0,   overwinter: true,  niche: true,  water: 2, drought: 3, heat: 2, frost: 5, nitrogen: 5, erosion: 4, organic: 4, pest: 4, income: 1, forage: 2, cover: 5 }
 };
 
-/* 3. ROTATION SCENARIOS */
-const strategies = [
-  {
-    id: "A", name: "Continuous alfalfa",
-    description: "A simple forage-focused baseline (existing practice).",
-    rotation: ["alfalfa","alfalfa","alfalfa","alfalfa"],
-    benefits: ["Strong forage production","Nitrogen fixation potential","Continuous soil cover"],
-    risks: ["Limited crop diversity","Potential pest and disease buildup","Long-term water demand needs monitoring"]
-  },
-  {
-    id: "B", name: "Water-efficient rotation",
-    description: "A diversified sequence including drought-tolerant crops and cover.",
-    rotation: ["alfalfa","barley","sorghum","rye"],
-    benefits: ["Includes drought-tolerant sorghum","Adds a cover-crop phase","More crop diversity than monoculture"],
-    risks: ["Sorghum is sensitive to frost","Cover establishment depends on water availability","Local market access should be checked"]
-  },
-  {
-    id: "C", name: "Soil-health rotation",
-    description: "A sequence emphasizing legumes, diversity and soil protection.",
-    rotation: ["alfalfa","wheat","safflower","pea"],
-    benefits: ["Includes a nitrogen-fixing legume","Varied crop families","Potential improvement in soil cover"],
-    risks: ["Forage production may vary","Crop timing needs local adaptation","Safflower market access should be verified"]
-  },
-  {
-    id: "D", name: "Balanced forage rotation",
-    description: "A forage-oriented sequence with diversified annual crops.",
-    rotation: ["alfalfa","triticale","sorghum","alfalfa"],
-    benefits: ["Strong forage potential","Includes a heat-tolerant crop","Alternates crop types"],
-    risks: ["Sorghum requires frost-free growing conditions","Alfalfa phases may increase water demand","Local forage demand affects economic value"]
-  }
+/* 3. STRATEGY OBJECTIVES
+   Strategy A is always "continuous current crop". B, C and D are generated:
+   each one is the best candidate rotation for its own objective (weights below).
+   The farmer's priorities (sliders) are then used to score and rank all four. */
+const PROFILES = [
+  { id: "B", name: "Water-efficient rotation", objective: "low water demand",
+    description: "Best candidate for low water demand and drought tolerance at this site.",
+    weights: { water: 5, income: 2, nitrogen: 2, erosion: 2, organic: 2, forage: 2 } },
+  { id: "C", name: "Soil-health rotation", objective: "soil health",
+    description: "Best candidate for nitrogen, erosion control and organic matter at this site.",
+    weights: { water: 2, income: 1, nitrogen: 5, erosion: 5, organic: 5, forage: 1 } },
+  { id: "D", name: "Income and forage rotation", objective: "income and forage",
+    description: "Best candidate for revenue and forage production at this site.",
+    weights: { water: 2, income: 5, nitrogen: 1, erosion: 1, organic: 1, forage: 5 } }
+];
+
+const TIERS = [
+  { family: true,  minDistinct: 4, allowCurrent: false },
+  { family: false, minDistinct: 4, allowCurrent: false },
+  { family: false, minDistinct: 3, allowCurrent: true }
 ];
 
 /* 4. MAP */
@@ -308,13 +323,10 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 const fieldMarker = L.marker([LATITUDE, LONGITUDE]).addTo(map);
 fieldMarker.bindPopup("Demo field — Fallon, Nevada").openPopup();
 
-map.on("click", function (event) {
-  const lat = event.latlng.lat.toFixed(4);
-  const lon = event.latlng.lng.toFixed(4);
-  fieldMarker.setLatLng(event.latlng);
-  fieldMarker.setPopupContent("Selected point: " + lat + ", " + lon).openPopup();
-  document.getElementById("locationLabel").textContent =
-    "Selected coordinates: " + lat + ", " + lon + " — NASA demo data remain associated with Fallon.";
+map.on("click", e => selectLocation(e.latlng));
+document.querySelectorAll(".preset").forEach(b => {
+  b.addEventListener("click", () =>
+    selectLocation(L.latLng(Number(b.dataset.lat), Number(b.dataset.lon)), b.dataset.name));
 });
 
 /* 5. DATA LOADING */
@@ -337,15 +349,26 @@ async function loadLocalData() {
   return response.json();
 }
 
-async function loadNasaData() {
+async function loadNasaData(lat, lon) {
   const url =
     "https://power.larc.nasa.gov/api/temporal/daily/point?" +
     "parameters=" + PARAMETER_NAMES.join(",") +
-    "&community=AG&longitude=" + LONGITUDE + "&latitude=" + LATITUDE +
+    "&community=AG&longitude=" + lon + "&latitude=" + lat +
     "&start=" + START_YEAR + "0101&end=" + END_YEAR + "1231&format=JSON";
-  const response = await fetch(url);
+  const response = await fetch(url, { signal: AbortSignal.timeout(45000) });
   if (!response.ok) throw new Error("NASA POWER request failed: " + response.status);
-  return response.json();
+  const json = await response.json();
+  if (!getParameters(json).T2M) throw new Error("NASA POWER returned no data for this point.");
+  return json;
+}
+
+function applyClimate(raw, lat) {
+  const next = calculateClimate(normalizeDailyData(raw), lat);   // throws before touching state
+  climate = next;
+  renderClimate();
+  renderStrategies();
+  renderTimeline();
+  updateScenario();
 }
 
 async function loadClimateData() {
@@ -359,14 +382,11 @@ async function loadClimateData() {
       status.textContent = "Loaded from local NASA dataset.";
     } catch (localError) {
       status.textContent = "Local file unavailable. Trying NASA POWER API...";
-      raw = await loadNasaData();
+      raw = await loadNasaData(LATITUDE, LONGITUDE);
       status.textContent = "Loaded directly from NASA POWER.";
     }
-    climate = calculateClimate(normalizeDailyData(raw));
-    renderClimate();
-    renderStrategies();
-    renderTimeline();
-    updateScenario();
+    applyClimate(raw, LATITUDE);
+    liveCache[LATITUDE.toFixed(2) + "," + LONGITUDE.toFixed(2)] = raw;
     status.className = "status";
     status.textContent =
       "Climate data loaded successfully · " + climate.years.length + " years · " +
@@ -378,82 +398,48 @@ async function loadClimateData() {
   }
 }
 
-/* 6. CLIMATE CALCULATIONS */
-function calculateClimate(dataset) {
-  const { dates, parameters } = dataset;
-  const annual = {};
-  const monthly = {};
+async function selectLocation(latlng, name) {
+  const ll = L.latLng(latlng).wrap();
+  const lat = ll.lat, lon = ll.lng;
+  const label = name || (lat.toFixed(2) + "°, " + lon.toFixed(2) + "°");
+  const myId = ++requestId;
+  const status = document.getElementById("dataStatus");
+  const loc = document.getElementById("locationLabel");
 
-  for (let m = 1; m <= 12; m++) {
-    monthly[m] = { rain: 0, wetness: [], temperature: [], count: 0 };
+  fieldMarker.setLatLng(ll);
+  fieldMarker.setPopupContent("Field: " + label).openPopup();
+  map.panTo(ll);
+  loc.className = "status";
+  loc.textContent = "Selected location: " + label;
+  status.className = "status";
+  status.textContent = "Fetching 10 years of NASA POWER data for " + label + "…";
+
+  const key = lat.toFixed(2) + "," + lon.toFixed(2);
+  try {
+    let raw = liveCache[key];
+    if (!raw) {
+      const isDemo = lat === LATITUDE && lon === LONGITUDE;
+      raw = isDemo ? await loadLocalData() : await loadNasaData(lat, lon);
+    }
+    if (myId !== requestId) return;          // a newer click replaced this one
+    applyClimate(raw, lat);
+    liveCache[key] = raw;
+    currentPlace = { lat, lon, name: label };
+    document.getElementById("placeName").textContent = label;
+    status.className = "status";
+    status.textContent = "NASA POWER data loaded · " + label + " · " +
+      climate.years.length + " years (" + climate.dates[0] + " to " +
+      climate.dates[climate.dates.length - 1] + ")";
+  } catch (error) {
+    if (myId !== requestId) return;
+    console.error(error);
+    fieldMarker.setLatLng([currentPlace.lat, currentPlace.lon]);
+    status.className = "status error";
+    status.textContent = "Could not load NASA POWER data for this point (network or no data). Still showing " + currentPlace.name + ".";
   }
-
-  for (const date of dates) {
-    const year = Number(date.slice(0, 4));
-    const month = Number(date.slice(4, 6));
-
-    if (!annual[year]) {
-      annual[year] = { rain: 0, heat: 0, frost: 0, wetness: [], days: 0, tmax: [], tmin: [] };
-    }
-
-    const value = name => {
-      const n = Number(parameters[name]?.[date]);
-      return Number.isFinite(n) && n > -900 ? n : null;   // -999 = NASA missing value
-    };
-
-    const rain = value("PRECTOTCORR");
-    const maxTemp = value("T2M_MAX");
-    const minTemp = value("T2M_MIN");
-    const wetness = value("GWETROOT");
-    const meanTemp = value("T2M");
-
-    if (rain !== null && rain >= 0) {
-      annual[year].rain += rain;
-      monthly[month].rain += rain;
-    }
-    if (maxTemp !== null) annual[year].tmax.push(maxTemp);
-    if (minTemp !== null) annual[year].tmin.push(minTemp);
-    if (maxTemp !== null && maxTemp > 35) annual[year].heat++;
-    if (minTemp !== null && minTemp < 0) annual[year].frost++;
-    if (wetness !== null) {
-      annual[year].wetness.push(wetness);
-      monthly[month].wetness.push(wetness);
-    }
-    if (maxTemp !== null) monthly[month].temperature.push(maxTemp);
-    if (meanTemp !== null) annual[year].days++;
-    monthly[month].count++;
-  }
-
-  const years = Object.keys(annual).map(Number).sort((a, b) => a - b);
-
-  const annualRows = years.map(year => {
-    const row = annual[year];
-    return {
-      year, rain: row.rain, heat: row.heat, frost: row.frost,
-      wetness: average(row.wetness), tmax: row.tmax, tmin: row.tmin
-    };
-  });
-
-  const monthlyRows = MONTHS.map((name, index) => {
-    const row = monthly[index + 1];
-    return {
-      month: name,
-      rain: row.count ? row.rain / Math.max(1, years.length) : 0,
-      wetness: average(row.wetness),
-      temperature: average(row.temperature)
-    };
-  });
-
-  return {
-    dates, years, annualRows, monthlyRows,
-    avgRain: average(annualRows.map(x => x.rain)),
-    avgHeat: average(annualRows.map(x => x.heat)),
-    avgFrost: average(annualRows.map(x => x.frost)),
-    avgWetness: average(annualRows.map(x => x.wetness)),
-    annualRainValues: annualRows.map(x => x.rain)
-  };
 }
 
+/* 6. CLIMATE CALCULATIONS */
 function average(values) {
   const valid = values.filter(v => Number.isFinite(v));
   if (!valid.length) return 0;
@@ -470,8 +456,105 @@ function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 function median(values) {
   const s = [...values].sort((a, b) => a - b);
+  if (!s.length) return 0;
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+function doyText(s, south) {
+  if (!Number.isFinite(s) || s <= 0 || s >= 365) return "none";
+  const d = south ? (((s - 182 + 365) % 365) || 365) : s;
+  return new Date(Date.UTC(2021, 0, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function calculateClimate(dataset, lat) {
+  const { dates, parameters } = dataset;
+  const south = lat < 0;
+  const annual = {};
+  const monthly = {};
+
+  for (let m = 1; m <= 12; m++) {
+    monthly[m] = { rain: 0, wetness: [], temperature: [], count: 0 };
+  }
+
+  for (const date of dates) {
+    const year = Number(date.slice(0, 4));
+    const month = Number(date.slice(4, 6));
+    const day = Number(date.slice(6, 8));
+
+    if (!annual[year]) {
+      annual[year] = { rain: 0, heat: 0, frost: 0, wetness: [], tmax: [], tminSeries: [] };
+    }
+
+    const value = name => {
+      const n = Number(parameters[name]?.[date]);
+      return Number.isFinite(n) && n > -900 ? n : null;   // -999 = NASA missing value
+    };
+
+    const rain = value("PRECTOTCORR");
+    const maxTemp = value("T2M_MAX");
+    const minTemp = value("T2M_MIN");
+    const wetness = value("GWETROOT");
+
+    if (rain !== null && rain >= 0) {
+      annual[year].rain += rain;
+      monthly[month].rain += rain;
+    }
+    if (maxTemp !== null) {
+      annual[year].tmax.push(maxTemp);
+      monthly[month].temperature.push(maxTemp);
+      if (maxTemp > 35) annual[year].heat++;
+    }
+    if (minTemp !== null) {
+      // day of year, shifted by half a year in the southern hemisphere so winter frost sits at the edges
+      const doy = Math.round((Date.UTC(year, month - 1, day) - Date.UTC(year, 0, 1)) / 86400000) + 1;
+      annual[year].tminSeries.push([south ? (doy + 182) % 365 : doy, minTemp]);
+      if (minTemp < 0) annual[year].frost++;
+    }
+    if (wetness !== null) {
+      annual[year].wetness.push(wetness);
+      monthly[month].wetness.push(wetness);
+    }
+    monthly[month].count++;
+  }
+
+  const years = Object.keys(annual).map(Number).sort((a, b) => a - b);
+
+  const annualRows = years.map(year => {
+    const row = annual[year];
+    return {
+      year, rain: row.rain, heat: row.heat, frost: row.frost,
+      wetness: average(row.wetness), tmax: row.tmax, tminSeries: row.tminSeries
+    };
+  });
+
+  if (!annualRows.some(r => r.tmax.length > 30)) {
+    throw new Error("No valid temperature data at this point (ocean or unsupported location).");
+  }
+
+  const monthlyRows = MONTHS.map((name, index) => {
+    const row = monthly[index + 1];
+    return {
+      month: name,
+      rain: row.count ? row.rain / Math.max(1, years.length) : 0,
+      wetness: average(row.wetness),
+      temperature: average(row.temperature)
+    };
+  });
+
+  const baseCtx = annualRows.map(r => yearContext(r, { temp: 0, rain: 0 }));
+
+  return {
+    dates, years, annualRows, monthlyRows, south,
+    avgRain: average(annualRows.map(x => x.rain)),
+    avgHeat: average(annualRows.map(x => x.heat)),
+    avgFrost: average(annualRows.map(x => x.frost)),
+    avgWetness: average(annualRows.map(x => x.wetness)),
+    annualRainValues: annualRows.map(x => x.rain),
+    frostFreeDays: median(baseCtx.map(c => c.frostFree)),
+    lastSpringText: doyText(median(baseCtx.map(c => c.lastSpring)), south),
+    firstAutumnText: doyText(median(baseCtx.map(c => c.firstAutumn)), south)
+  };
 }
 
 /* 7. CHARTS */
@@ -485,6 +568,7 @@ function createChart(id, type, labels, datasets, options = {}) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,
       interaction: { intersect: false, mode: "index" },
       plugins: { legend: { labels: { color: "#26352b", usePointStyle: true } } },
       scales: {
@@ -500,6 +584,8 @@ function renderClimate() {
   document.getElementById("rainKpi").textContent = Math.round(climate.avgRain);
   document.getElementById("heatKpi").textContent = Math.round(climate.avgHeat);
   document.getElementById("frostKpi").textContent = Math.round(climate.avgFrost);
+  document.getElementById("ffKpi").textContent = Math.round(climate.frostFreeDays);
+  document.getElementById("frostDatesKpi").textContent = climate.lastSpringText + " → " + climate.firstAutumnText;
   document.getElementById("soilKpi").textContent = climate.avgWetness.toFixed(2);
 
   const labels = climate.monthlyRows.map(x => x.month);
@@ -528,7 +614,7 @@ function renderClimate() {
   ]);
 }
 
-/* 8. SCORING (climate-aware) */
+/* 8. SETTINGS, CLIMATE CONTEXT AND SCORING */
 function getWeights() {
   return {
     water: Number(document.getElementById("waterWeight").value),
@@ -537,6 +623,15 @@ function getWeights() {
     erosion: Number(document.getElementById("erosionWeight").value),
     organic: Number(document.getElementById("organicWeight").value),
     forage: Number(document.getElementById("forageWeight").value)
+  };
+}
+
+function readSettings() {
+  return {
+    weights: getWeights(),
+    soil: document.getElementById("soilType").value,
+    irrigation: document.getElementById("irrigation").value,
+    current: document.getElementById("currentCrop").value || "alfalfa"
   };
 }
 
@@ -549,39 +644,56 @@ function getScenario() {
 
 // Climate of one year, shifted by the scenario sliders
 function yearContext(row, scenario) {
+  let frost = 0, lastSpring = 0, firstAutumn = 365;
+  for (const [doy, t] of row.tminSeries) {
+    if (t + scenario.temp < 0) {
+      frost++;
+      if (doy <= 182) { if (doy > lastSpring) lastSpring = doy; }
+      else if (doy < firstAutumn) firstAutumn = doy;
+    }
+  }
   return {
     heat: row.tmax.filter(t => t + scenario.temp > 35).length,
-    frost: row.tmin.filter(t => t + scenario.temp < 0).length,
+    frost,
     rain: row.rain * (1 + scenario.rain / 100),
+    temp: scenario.temp,
+    lastSpring,
+    firstAutumn,
+    frostFree: Math.max(0, Math.min(365, firstAutumn - lastSpring))
+  };
+}
+
+function meanOfContexts(list, scenario) {
+  return {
+    heat: average(list.map(c => c.heat)),
+    frost: average(list.map(c => c.frost)),
+    rain: average(list.map(c => c.rain)),
+    frostFree: average(list.map(c => c.frostFree)),
     temp: scenario.temp
   };
 }
 
 function meanContext(scenario) {
-  const list = climate.annualRows.map(r => yearContext(r, scenario));
-  return {
-    heat: average(list.map(c => c.heat)),
-    frost: average(list.map(c => c.frost)),
-    rain: average(list.map(c => c.rain)),
-    temp: scenario.temp
-  };
+  return meanOfContexts(climate.annualRows.map(r => yearContext(r, scenario)), scenario);
 }
 
 // Indicative heuristic penalties (points), not a yield model
-function cropPenalty(crop, ctx) {
-  const rainRatio = ctx.rain / (climate.avgRain || 1);
-  const waterStress = clamp(0.5 + (1 - rainRatio) * 0.5 + ctx.temp * 0.06, 0, 1);
+function cropPenalty(crop, ctx, irrigation) {
+  const irrFactor = { limited: 1.15, moderate: 0.8, abundant: 0.5 }[irrigation] || 0.8;
+  const aridity = clamp(1 - ctx.rain / 700, 0, 1);
+  const waterStress = clamp((aridity + ctx.temp * 0.05) * irrFactor, 0, 1);
+  const shortfall = crop.minFF > 0 ? clamp((crop.minFF - ctx.frostFree) / crop.minFF * 2, 0, 1) : 0;
   return {
     heat: ((5 - crop.heat) / 4) * Math.min(ctx.heat / 60, 1) * 6,
-    frost: ((5 - crop.frost) / 4) * Math.min(ctx.frost / 150, 1) * 3,
-    water: ((5 - crop.drought) / 4) * waterStress * 8
+    frost: crop.overwinter ? ((5 - crop.frost) / 4) * Math.min(ctx.frost / 150, 1) * 3 : 0,
+    water: ((5 - crop.drought) / 4) * waterStress * 8,
+    season: shortfall * 8,
+    demand: ((crop.water - 2) / 3) * aridity * irrFactor * 6   // thirsty crop in a dry place
   };
 }
 
-function scoreStrategy(strategy, ctx) {
-  const weights = getWeights();
-  const soil = document.getElementById("soilType").value;
-  const irrigation = document.getElementById("irrigation").value;
+function scoreStrategy(strategy, ctx, settings, weightsOverride) {
+  const weights = weightsOverride || settings.weights;
   const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
   const cropList = strategy.rotation.map(key => crops[key]);
 
@@ -602,25 +714,100 @@ function scoreStrategy(strategy, ctx) {
   score += Math.max(0, diversity - 1) * 1.2;
   score += (average(cropList.map(x => x.cover)) - 3) * 1.2;
 
-  if (soil === "sandy") score += average(cropList.map(x => x.erosion - 3)) * 0.7;
-  else if (soil === "clay") score += average(cropList.map(x => x.cover - 3)) * 0.5;
+  if (settings.soil === "sandy") score += average(cropList.map(x => x.erosion - 3)) * 0.7;
+  else if (settings.soil === "clay") score += average(cropList.map(x => x.cover - 3)) * 0.5;
 
-  if (irrigation === "limited") score += average(cropList.map(x => (6 - x.water) - 3)) * 1.0;
-  else if (irrigation === "abundant") score += average(cropList.map(x => x.water - 3)) * 0.5;
+  if (settings.irrigation === "limited") score += average(cropList.map(x => (6 - x.water) - 3)) * 1.0;
+  else if (settings.irrigation === "abundant") score += average(cropList.map(x => x.water - 3)) * 0.5;
 
   score -= (strategy.rotation.length - diversity) * 1.5;
 
-  // Climate penalty for this year's conditions
   const penalties = cropList.map(c => {
-    const p = cropPenalty(c, ctx);
-    return p.heat + p.frost + p.water;
+    const p = cropPenalty(c, ctx, settings.irrigation);
+    return p.heat + p.frost + p.water + p.season + p.demand;
   });
   score -= average(penalties);
 
   return clamp(score, 0, 100);
 }
 
-/* 9. CONFIDENCE */
+/* 9. ROTATION GENERATOR (tuned to place, current crop and climate) */
+function generateCandidates(current, pool, opts) {
+  const fam = k => crops[k].family;
+  const pool2 = opts.allowCurrent ? pool.concat(current) : pool;
+  const out = [];
+  for (const b of pool2) {
+    if (b === current) continue;
+    if (opts.family && fam(b) === fam(current)) continue;
+    for (const c of pool2) {
+      if (c === b) continue;
+      if (opts.family && fam(c) === fam(b)) continue;
+      for (const d of pool2) {
+        if (d === c || d === current) continue;
+        if (opts.family && (fam(d) === fam(c) || fam(d) === fam(current))) continue;
+        const seq = [current, b, c, d];
+        if (new Set(seq).size < opts.minDistinct) continue;
+        if (seq.filter(k => crops[k].role === "cover").length > 1) continue;
+        out.push(seq);
+      }
+    }
+  }
+  return out;
+}
+
+function getCandidates(current, pool) {
+  const key = current + "|" + pool.join(",");
+  if (!candCache[key]) {
+    let cands = [];
+    for (const tier of TIERS) {
+      cands = generateCandidates(current, pool, tier);
+      if (cands.length >= 12) break;
+    }
+    candCache[key] = cands;
+  }
+  return candCache[key];
+}
+
+function buildStrategies(settings, mean) {
+  const current = settings.current;
+  const others = Object.keys(crops).filter(k => k !== current);
+  const pool = others.filter(k => crops[k].minFF <= mean.frostFree);
+  const excluded = others.filter(k => crops[k].minFF > mean.frostFree);
+  const cands = getCandidates(current, pool);
+
+  const list = [{
+    id: "A",
+    name: "Continuous " + crops[current].name.toLowerCase(),
+    description: "Baseline: the current crop every year (existing practice), scored like the alternatives.",
+    objective: "existing practice",
+    rotation: [current, current, current, current]
+  }];
+
+  // B, C and D must differ: first allow at most 2 crops in common with an already chosen rotation,
+  // then relax to 3 if the crop pool is too small
+  const chosen = [];
+  for (const profile of PROFILES) {
+    let best = null;
+    for (const maxOverlap of [2, 3]) {
+      for (const seq of cands) {
+        if (chosen.some(u => seq.filter(k => u.includes(k)).length > maxOverlap)) continue;
+        const s = scoreStrategy({ rotation: seq }, mean, settings, profile.weights);
+        if (!best || s > best.s) best = { seq, s };
+      }
+      if (best) break;
+    }
+    if (!best) continue;
+    chosen.push(best.seq);
+    list.push({
+      id: profile.id, name: profile.name, description: profile.description,
+      objective: profile.objective, rotation: best.seq
+    });
+  }
+
+  return { strategies: list, evaluated: cands.length, poolSize: pool.length, excluded };
+}
+
+/* 10. CONFIDENCE, EVIDENCE, BENEFITS, RISKS */
 function getConfidence() {
   const coefficient = standardDeviation(climate.annualRainValues) / (climate.avgRain || 1);
   if (coefficient < 0.25) return { label: "Indicative: relatively stable", level: "high" };
@@ -628,39 +815,139 @@ function getConfidence() {
   return { label: "Indicative: high variability", level: "low" };
 }
 
-/* 10. STRATEGY CARDS */
-function strategyEvidence(strategy, mean) {
-  const labels = { heat: "heat stress", frost: "frost", water: "water stress" };
+function strategyEvidence(strategy, mean, irrigation) {
+  const labels = { heat: "heat stress", frost: "winter frost", water: "water stress", season: "short frost-free season", demand: "high water demand vs low rainfall" };
   let worst = null;
 
   strategy.rotation.forEach(key => {
-    const p = cropPenalty(crops[key], mean);
+    const p = cropPenalty(crops[key], mean, irrigation);
     const [factor, value] = Object.entries(p).sort((a, b) => b[1] - a[1])[0];
     if (!worst || value > worst.value) worst = { crop: crops[key].name, factor: labels[factor], value };
   });
 
+  const exposure = worst.value < 0.5
+    ? "No crop in this rotation is strongly climate-exposed here"
+    : "Most climate-exposed crop: " + worst.crop + " (" + worst.factor + ", −" + worst.value.toFixed(1) + " pts)";
+
   return [
-    mean.heat.toFixed(0) + " hot days (>35°C) and " + mean.frost.toFixed(0) + " frost days per year in this scenario",
-    "Most climate-exposed crop: " + worst.crop + " (" + worst.factor + ", −" + worst.value.toFixed(1) + " pts)",
+    mean.heat.toFixed(0) + " hot days (>35°C), " + mean.frost.toFixed(0) + " frost days and a " +
+      mean.frostFree.toFixed(0) + "-day frost-free season per year in this scenario",
+    exposure,
     "Average annual precipitation: " + mean.rain.toFixed(0) + " mm"
   ];
+}
+
+function buildBenefits(s, base) {
+  const out = [];
+  const isBase = s.id === "A";
+  const uniq = [...new Set(s.rotation)];
+  const cs = s.rotation.map(k => crops[k]);
+  const bs = base.rotation.map(k => crops[k]);
+  const nm = list => list.map(k => crops[k].name).join(", ");
+
+  const legumes = uniq.filter(k => crops[k].family === "legume");
+  const covers = uniq.filter(k => crops[k].role === "cover");
+  const dry = uniq.filter(k => crops[k].drought >= 4);
+  const families = new Set(uniq.map(k => crops[k].family)).size;
+  const w = average(cs.map(c => c.water)), bw = average(bs.map(c => c.water));
+  const inc = average(cs.map(c => c.income)), binc = average(bs.map(c => c.income));
+
+  if (isBase) out.push("Simplest to manage: one crop, one calendar, one set of equipment");
+  if (legumes.length) out.push("Nitrogen-fixing legume in the sequence: " + nm(legumes));
+  if (covers.length) out.push("Cover-crop phase (" + nm(covers) + ") protects soil between cash crops");
+  if (!isBase && families >= 3) out.push(families + " crop families help break pest and disease cycles");
+  if (!isBase && w < bw - 0.2) out.push("Lower average water-demand rating than the baseline (" + w.toFixed(1) + " vs " + bw.toFixed(1) + ", scale 1–5)");
+  if (!isBase && dry.length) out.push("Drought-tolerant crops: " + nm(dry));
+  if (!isBase && inc > binc + 0.2) out.push("Higher average income rating than the baseline (" + inc.toFixed(1) + " vs " + binc.toFixed(1) + ")");
+  if (average(cs.map(c => c.forage)) >= 4) out.push("Strong forage production potential");
+  if (average(cs.map(c => c.erosion)) >= 4) out.push("Good erosion control (average rating of 4 or more out of 5)");
+  if (!out.length) out.push("Diversifies the crop sequence compared with the baseline");
+  return out.slice(0, 4);
+}
+
+function buildRisks(s, mean, settings) {
+  const out = [];
+  const uniq = [...new Set(s.rotation)];
+  const nm = list => list.map(k => crops[k].name).join(", ");
+
+  if (uniq.length === 1) out.push("Same crop every year: pest, disease and nutrient-depletion risk builds up");
+
+  uniq.forEach(k => {
+    const c = crops[k];
+    if (c.minFF > 0) {
+      const margin = mean.frostFree - c.minFF;
+      if (margin < 0) out.push(c.name + " needs about " + c.minFF + " frost-free days; this site averages " + Math.round(mean.frostFree) + " (short by " + Math.round(-margin) + ")");
+      else if (margin < 25) out.push(c.name + " needs about " + c.minFF + " frost-free days; this site averages " + Math.round(mean.frostFree) + " (thin margin)");
+    }
+  });
+
+  const thirsty = uniq.filter(k => crops[k].water >= 4);
+  if (thirsty.length && mean.rain < 400 && settings.irrigation !== "abundant") {
+    out.push(nm(thirsty) + " demand a lot of water in a dry climate (" + Math.round(mean.rain) + " mm/year): check irrigation rights and supply");
+  }
+
+  const heatSensitive = uniq.filter(k => crops[k].heat <= 2);
+  if (heatSensitive.length && mean.heat > 20) {
+    out.push(nm(heatSensitive) + " is heat-sensitive and this site averages " + Math.round(mean.heat) + " hot days per year");
+  }
+
+  const niche = uniq.filter(k => crops[k].niche);
+  if (niche.length) out.push("Local market and equipment for " + nm(niche) + " should be verified");
+
+  return out.slice(0, 3).concat("Crop timing, soil tests and water rights need local validation");
+}
+
+/* 11. STRATEGY CARDS */
+function renderBuildNote(built, settings, mean) {
+  const el = document.getElementById("buildNote");
+  const cur = crops[settings.current];
+  const ff = Math.round(mean.frostFree);
+  let html =
+    "<strong>How these rotations were built for this site.</strong> Year 1 of every alternative is your current crop (" +
+    cur.name + "); strategy A keeps it every year as the baseline. The model evaluated <strong>" + built.evaluated +
+    "</strong> candidate rotations made from the " + built.poolSize +
+    " other crops that fit a frost-free season of about <strong>" + ff +
+    " days</strong>, then kept the best one for each objective (low water demand, soil health, income and forage).";
+
+  if (built.excluded.length) {
+    html += "<br>Excluded at this site: " +
+      built.excluded.map(k => crops[k].name + " (needs about " + crops[k].minFF + " frost-free days)").join(", ") + ".";
+  }
+
+  if (cur.minFF > mean.frostFree) {
+    html += "<br><strong>Warning:</strong> " + cur.name + " needs about " + cur.minFF +
+      " frost-free days but this site averages " + ff + ". The baseline is penalized for it.";
+    el.className = "status warning";
+  } else {
+    el.className = "status";
+  }
+  el.innerHTML = html;
 }
 
 function renderStrategies() {
   if (!climate) return;
 
+  const settings = readSettings();
   const scenario = getScenario();
   const confidence = getConfidence();
-  const mean = meanContext(scenario);
+
+  const ctxByYear = climate.annualRows.map(r => yearContext(r, scenario));
+  const mean = meanOfContexts(ctxByYear, scenario);
+
+  const built = buildStrategies(settings, mean);
+  renderBuildNote(built, settings, mean);
+
+  const list = built.strategies;
+  const base = list[0];
 
   // One score per year (2016–2025) for every strategy
   const annual = {};
-  strategies.forEach(s => {
-    annual[s.id] = climate.annualRows.map(row => scoreStrategy(s, yearContext(row, scenario)));
+  list.forEach(s => {
+    annual[s.id] = ctxByYear.map(ctx => scoreStrategy(s, ctx, settings));
   });
   const baseline = annual["A"];
 
-  const ranked = strategies.map(s => {
+  const ranked = list.map(s => {
     const scores = annual[s.id];
     return {
       ...s,
@@ -681,13 +968,18 @@ function renderStrategies() {
     const confidenceClass = confidence.level === "high" ? "" : confidence.level;
     const winsText = strategy.id === "A"
       ? "Reference rotation (existing practice)"
-      : "Beats continuous alfalfa in " + strategy.wins + " of " + climate.years.length + " years";
+      : "Beats continuous " + crops[settings.current].name.toLowerCase() + " in " + strategy.wins + " of " + climate.years.length + " years";
+    const why = strategy.id === "A"
+      ? "Why it is here: it is your existing practice, so every alternative is compared against it."
+      : "Why it was suggested: best of " + built.evaluated + " candidate rotations for " + strategy.objective +
+        ", using only crops that fit this site's frost-free season.";
 
     card.innerHTML = `
       <h3>${strategy.id}. ${strategy.name}</h3>
       ${index === 0 ? '<span class="confidence">Highest relative score</span>' : ""}
       <div class="strategy-score">${strategy.score.toFixed(1)}<small> / 100 (median)</small></div>
       <p>${strategy.description}</p>
+      <p class="why">${why}</p>
 
       <strong>Four-year rotation</strong>
       <div class="rotation">
@@ -695,13 +987,13 @@ function renderStrategies() {
       </div>
 
       <strong>NASA climate evidence</strong>
-      <ul>${strategyEvidence(strategy, mean).map(x => `<li>${x}</li>`).join("")}</ul>
+      <ul>${strategyEvidence(strategy, mean, settings.irrigation).map(x => `<li>${x}</li>`).join("")}</ul>
 
       <strong>Potential benefits</strong>
-      <ul>${strategy.benefits.map(x => `<li>${x}</li>`).join("")}</ul>
+      <ul>${buildBenefits(strategy, base).map(x => `<li>${x}</li>`).join("")}</ul>
 
       <strong>Gaps and local risks</strong>
-      <ul>${strategy.risks.map(x => `<li>${x}</li>`).join("")}</ul>
+      <ul>${buildRisks(strategy, mean, settings).map(x => `<li>${x}</li>`).join("")}</ul>
 
       <strong>Year-by-year robustness</strong>
       <p>
@@ -718,7 +1010,7 @@ function renderStrategies() {
   renderDashboard(ranked, annual);
 }
 
-/* 10b. DASHBOARD (4 official modules) */
+/* 12. DASHBOARD (4 official modules) */
 const STRAT_COLORS = {
   A: { line: "#8d6e63", fill: "rgba(141,110,99,.15)" },
   B: { line: "#1565c0", fill: "rgba(21,101,192,.15)" },
@@ -808,7 +1100,7 @@ function renderDashboard(ranked, annual) {
   document.getElementById("riskCaption").textContent =
     "Orange = weaker year, green = stronger year. Weakest year for the top-ranked rotation (" +
     top.id + "): " + years[worst] + ", score " + topScores[worst].toFixed(1) +
-    ", with " + wc.heat + " hot days and " + wc.frost + " frost days.";
+    ", with " + wc.heat + " hot days, " + wc.frost + " frost days and a " + wc.frostFree + "-day frost-free season.";
 
   // MODULE 04: make uncertainty visible (min-max range)
   const axMin = Math.floor(Math.min(...ranked.map(s => s.min)) - 3);
@@ -831,7 +1123,7 @@ function renderDashboard(ranked, annual) {
   );
 }
 
-/* 11. BARE-SOIL TIMELINE */
+/* 13. BARE-SOIL TIMELINE */
 function renderTimeline() {
   const timeline = document.getElementById("timeline");
   // Illustrative cover calendar, not satellite-observed bare soil.
@@ -846,7 +1138,7 @@ function renderTimeline() {
   });
 }
 
-/* 12. SCENARIO EXPLORER */
+/* 14. SCENARIO EXPLORER */
 function updateScenario() {
   if (!climate) return;
 
@@ -865,13 +1157,22 @@ function updateScenario() {
     <strong>Hypothetical climate conditions</strong><br>
     Annual precipitation: ${adjustedRain.toFixed(0)} mm/year (${rainChange > 0 ? "+" : ""}${rainChange}%)<br>
     Temperature shift: ${tempChange > 0 ? "+" : ""}${tempChange.toFixed(1)}°C<br>
-    Hot days above 35°C: ${m.heat.toFixed(0)} days/year · Frost days: ${m.frost.toFixed(0)} days/year
-    <p>Rotation scores and the dashboard above are recalculated with these conditions.
+    Hot days above 35°C: ${m.heat.toFixed(0)} days/year · Frost days: ${m.frost.toFixed(0)} days/year · Frost-free season: ${m.frostFree.toFixed(0)} days
+    <p>The generated rotations, scores and dashboard above are recalculated with these conditions.
     This is a sensitivity exercise: it does not predict crop yields or future weather.</p>
   `;
 }
 
-/* 13. INTERACTIONS */
+/* 15. INTERACTIONS */
+function populateCurrentCrop() {
+  const select = document.getElementById("currentCrop");
+  select.innerHTML = Object.keys(crops)
+    .filter(k => crops[k].role === "main")
+    .map(k => `<option value="${k}">${crops[k].name}</option>`)
+    .join("");
+  select.value = "alfalfa";
+}
+
 ["waterWeight","incomeWeight","nitrogenWeight","erosionWeight","organicWeight","forageWeight"].forEach(id => {
   const input = document.getElementById(id);
   const output = document.getElementById(id.replace("Weight", "Value"));
@@ -894,7 +1195,8 @@ document.getElementById("compareButton").addEventListener("click", renderStrateg
   });
 });
 
-/* 14. START */
+/* 16. START */
+populateCurrentCrop();
 loadClimateData();
 </script>
 </body>
